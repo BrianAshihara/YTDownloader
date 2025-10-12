@@ -1,24 +1,13 @@
 import streamlit as st
-import os
 import yt_dlp
 from pathlib import Path
-import platform
+import os
+import sys
 
-# Detecta a pasta de Downloads do usuário de forma compatível
-def get_downloads_folder():
-    system = platform.system()
-    if system == "Windows":
-        return Path(os.path.join(os.environ["USERPROFILE"], "Downloads"))
-    elif system in ("Linux", "Darwin"):  # Darwin = macOS
-        return Path.home() / "Downloads"
-    else:
-        # fallback genérico
-        return Path.cwd() / "Downloads"
+# ==============================================
+# 🚀 YTDownloader — versão MVP 1.1
+# ==============================================
 
-DOWNLOAD_DIR = get_downloads_folder()
-DOWNLOAD_DIR.mkdir(exist_ok=True)
-
-# Configuração da página
 st.set_page_config(
     page_title="YTDownloader",
     page_icon="🎥",
@@ -26,82 +15,85 @@ st.set_page_config(
 )
 
 st.title("🎥 YTDownloader")
-st.markdown("Baixe vídeos ou áudios do YouTube diretamente para sua pasta de Downloads!")
+st.markdown("Baixe vídeos ou áudios do YouTube diretamente para sua pasta **Downloads**.")
 
-# Entrada de URL
-url = st.text_input("Cole a URL do vídeo do YouTube aqui:", placeholder="https://www.youtube.com/watch?v=...")
+# ==============================================
+# 📂 Define a pasta de destino (Downloads)
+# ==============================================
+if sys.platform.startswith("win"):
+    download_path = Path(os.path.join(os.path.expanduser("~"), "Downloads"))
+else:
+    download_path = Path.home() / "Downloads"
 
-# Botões de ação
-col1, col2 = st.columns(2)
-download_video = col1.button("🎬 Baixar Vídeo (MP4)")
-download_audio = col2.button("🎧 Baixar Áudio (MP3)")
+# ==============================================
+# 📥 Entrada de URL
+# ==============================================
+url = st.text_input("Cole a URL do vídeo do YouTube aqui:")
 
-def baixar_midia(url, tipo):
-    """Baixa vídeo ou áudio usando yt-dlp"""
-    if not url:
-        st.warning("Por favor, insira uma URL válida.")
-        return None
+# Placeholder para mensagens dinâmicas
+status_placeholder = st.empty()
 
-    st.info("⏳ Preparando o download...")
-
-    # Configurações de saída
-    if tipo == "video":
-        ydl_opts = {
-            'outtmpl': str(DOWNLOAD_DIR / '%(title)s.%(ext)s'),
-            'format': 'bestvideo[height<=1080]+bestaudio/best[height<=1080]',
-            'merge_output_format': 'mp4',
-            'quiet': True
-        }
-    else:
-        ydl_opts = {
-            'outtmpl': str(DOWNLOAD_DIR / '%(title)s.%(ext)s'),
-            'format': 'bestaudio/best',
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-            'quiet': True
-        }
-
+# ==============================================
+# ⚙️ Função de Download
+# ==============================================
+def baixar_video(url: str, somente_audio=False):
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            nome_arquivo = ydl.prepare_filename(info)
-            if tipo == "audio":
-                nome_arquivo = os.path.splitext(nome_arquivo)[0] + ".mp3"
+        # Define opções de acordo com o modo
+        if somente_audio:
+            formato = {
+                "format": "bestaudio/best",
+                "outtmpl": str(download_path / "%(title)s.%(ext)s"),
+                "postprocessors": [{
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "mp3",
+                    "preferredquality": "192",
+                }],
+                "quiet": True
+            }
+        else:
+            formato = {
+                "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4",
+                "outtmpl": str(download_path / "%(title)s.%(ext)s"),
+                "merge_output_format": "mp4",
+                "quiet": True
+            }
 
-        return nome_arquivo
+        # Atualiza status
+        status_placeholder.info("⏳ Preparando o download...")
+
+        # Faz o download com yt-dlp
+        with yt_dlp.YoutubeDL(formato) as ydl:
+            ydl.download([url])
+
+        # Remove mensagem anterior
+        status_placeholder.empty()
+
+        # Mensagem de sucesso
+        st.success(f"✅ Download concluído!\n\n📂 Arquivo salvo em: `{download_path}`")
 
     except Exception as e:
-        st.error(f"❌ Erro ao baixar: {e}")
-        return None
+        status_placeholder.empty()
+        st.error(f"❌ Ocorreu um erro: {e}")
 
+# ==============================================
+# 🎬 Botões de ação
+# ==============================================
+col1, col2 = st.columns(2)
 
-# Lógica dos botões
-if download_video and url:
-    arquivo = baixar_midia(url, "video")
-    if arquivo and os.path.exists(arquivo):
-        st.success(f"✅ Download concluído! O arquivo foi salvo em:\n📂 {DOWNLOAD_DIR}")
-        with open(arquivo, "rb") as f:
-            st.download_button(
-                label="📥 Baixar novamente (MP4)",
-                data=f,
-                file_name=os.path.basename(arquivo),
-                mime="video/mp4"
-            )
+with col1:
+    if st.button("🎬 Baixar Vídeo (MP4)"):
+        if url.strip():
+            baixar_video(url, somente_audio=False)
+        else:
+            st.warning("Por favor, insira uma URL válida.")
 
-if download_audio and url:
-    arquivo = baixar_midia(url, "audio")
-    if arquivo and os.path.exists(arquivo):
-        st.success(f"✅ Download concluído! O arquivo foi salvo em:\n📂 {DOWNLOAD_DIR}")
-        with open(arquivo, "rb") as f:
-            st.download_button(
-                label="🎵 Baixar novamente (MP3)",
-                data=f,
-                file_name=os.path.basename(arquivo),
-                mime="audio/mpeg"
-            )
+with col2:
+    if st.button("🎧 Baixar Áudio (MP3)"):
+        if url.strip():
+            baixar_video(url, somente_audio=True)
+        else:
+            st.warning("Por favor, insira uma URL válida.")
 
+# Rodapé
 st.markdown("---")
-st.caption("Desenvolvido por Brian Ashihara — versão prévia")
+st.caption("Desenvolvido por Brian Ashihara • Versão Prévia 1.2")
