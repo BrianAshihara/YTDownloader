@@ -1,45 +1,69 @@
-# 🎥 YTDownloader
+# 🎬 YTDownloader
 
-> Um aplicativo web simples e elegante para baixar vídeos e áudios do YouTube diretamente para a pasta **Downloads** do seu computador.
+[![Python](https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+[![yt-dlp](https://img.shields.io/badge/yt--dlp-v2025.10.12-orange)](https://github.com/yt-dlp/yt-dlp)
 
----
-
-## 🚀 Sobre o Projeto
-
-O **YTDownloader** é uma aplicação desenvolvida em **Python** utilizando o **Streamlit** e a poderosa biblioteca **yt-dlp**.  
-Ele permite baixar vídeos ou extrair apenas o áudio de links do YouTube, de forma rápida, gratuita e sem complicações.
-
-Este projeto foi criado como um **MVP (Minimum Viable Product)** — ou seja, uma primeira versão funcional e mínima, voltada a demonstrar a ideia principal de maneira eficiente e organizada.  
+**YTDownloader** é uma aplicação desktop desenvolvida em **Python** que permite baixar vídeos e áudios do YouTube com alta qualidade diretamente para a pasta de downloads do usuário.  
+Ideal para quem deseja uma interface simples, funcional e moderna para gerenciar downloads de mídia.
 
 ---
 
----
+## 🛠️ Funcionalidades
 
-![App Screenshot](screenshots/ytd.png)
-
----
-
-## 🧩 Funcionalidades
-
-✅ Download de vídeos em alta qualidade (até 1080p)  
-🎧 Download apenas do áudio em `.mp3`  
-💾 Salvamento automático na **pasta de Downloads do usuário**  
-⚡ Mensagens dinâmicas de status (“Preparando download...”, “Download concluído!”)  
-💬 Interface amigável e interativa via navegador  
-🧱 Código limpo, modular e pronto para evolução  
+- Baixar vídeos em **MP4** na melhor qualidade disponível (até 1080p).  
+- Baixar apenas o áudio em **MP3** (192 kbps).  
+- Barra de progresso em tempo real durante o download.  
+- Mensagens de status: preparação, progresso e conclusão do download.  
+- Interface moderna com tema escuro, utilizando **Tkinter**.  
+- Salva os arquivos automaticamente na pasta padrão de **Downloads**.  
+- Multithreading para manter a interface responsiva durante downloads.  
 
 ---
 
-## 🛠️ Tecnologias e Técnicas Utilizadas
+## 🖥️ Tecnologias utilizadas
 
-| Categoria | Tecnologia / Técnica | Descrição |
-|------------|----------------------|------------|
-| **Framework Web** | 🌐 [Streamlit](https://streamlit.io/) | Interface interativa em navegador |
-| **Download Engine** | 📦 [yt-dlp](https://github.com/yt-dlp/yt-dlp) | Ferramenta para baixar e converter vídeos |
-| **Conversão de Mídia** | 🎞️ FFmpeg (via yt-dlp) | Processamento de áudio e vídeo |
-| **Arquitetura** | 🧱 Padrão MVP | Produto mínimo viável, funcional e demonstrável |
-| **UX/UI** | 💡 Uso de placeholders (`st.empty()`) | Atualização em tempo real de mensagens |
-| **Sistema de Arquivos** | 🗂️ `pathlib` e `os` | Identificação automática da pasta Downloads |
-| **Boas Práticas** | ✅ Código limpo e organizado | Facilidade de leitura e manutenção |
+| Tecnologia | Função |
+|------------|--------|
+| Python 3 | Linguagem principal do projeto |
+| Tkinter | Interface gráfica desktop leve e nativa |
+| yt-dlp | Biblioteca de download do YouTube |
+| threading | Mantém a interface responsiva durante o download |
+| pathlib | Manipulação de caminhos de arquivos de forma cross-platform |
+| FFmpeg | Mescla vídeo e áudio quando necessário |
+
+---
+
+## 📦 Pré-requisitos
+
+1. **Python 3.10+** instalado.  
+2. Biblioteca **yt-dlp**:
+   ```bash
+   pip install yt-dlp
+3. **FFmpeg** instalado e acessível via PATH (ou embutido no executável).  
+
+> Para Windows, você pode baixar FFmpeg aqui: [https://www.gyan.dev/ffmpeg/builds/](https://www.gyan.dev/ffmpeg/builds/)
+
+---
+
+## ⚡ Instalação e execução
+
+1. Clone ou baixe o projeto:  
+   ```bash
+   git clone https://github.com/seu-usuario/YTDownloader.git
+   cd YTDownloader
+2. Instale as dependências necessárias:
+
+   pip install yt-dlp
+3. Execute o aplicativo:
+
+   python main.py
 
 
+## 🎨 Uso
+
+1. Abra o YTDownloader.
+2. Cole a URL do vídeo do YouTube no campo de texto.
+3. Clique em “Baixar Vídeo (MP4)” para vídeo completo ou “Baixar Áudio (MP3)” para áudio apenas.
+4. Acompanhe o progresso pelo indicador de barra.
+5. Ao finalizar, uma mensagem informará que o download foi concluído.
