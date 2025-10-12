@@ -38,7 +38,7 @@ status_placeholder = st.empty()
 # ==============================================
 def baixar_video(url: str, somente_audio=False):
     try:
-        # Define opções de acordo com o modo
+        # Define as opções básicas
         if somente_audio:
             formato = {
                 "format": "bestaudio/best",
@@ -48,32 +48,31 @@ def baixar_video(url: str, somente_audio=False):
                     "preferredcodec": "mp3",
                     "preferredquality": "192",
                 }],
-                "quiet": True
+                "quiet": True,
+                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                "extractor_args": {"youtube": {"player_client": ["android"]}},
             }
         else:
             formato = {
                 "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4",
                 "outtmpl": str(download_path / "%(title)s.%(ext)s"),
                 "merge_output_format": "mp4",
-                "quiet": True
+                "quiet": True,
+                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                "extractor_args": {"youtube": {"player_client": ["android"]}},
             }
 
-        # Atualiza status
         status_placeholder.info("⏳ Preparando o download...")
 
-        # Faz o download com yt-dlp
         with yt_dlp.YoutubeDL(formato) as ydl:
             ydl.download([url])
 
-        # Remove mensagem anterior
         status_placeholder.empty()
-
-        # Mensagem de sucesso
         st.success(f"✅ Download concluído!\n\n📂 Arquivo salvo em: `{download_path}`")
 
     except Exception as e:
         status_placeholder.empty()
-        st.error(f"❌ Ocorreu um erro: {e}")
+        st.error(f"❌ Erro ao baixar: {e}")
 
 # ==============================================
 # 🎬 Botões de ação
