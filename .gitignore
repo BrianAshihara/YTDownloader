@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.pyo
+*.ico
 
 # Distribution / Packaging
 build/
@@ -35,3 +36,6 @@ Desktop.ini
 
 # Local binaries
 ffmpeg.exe
+
+# Dev container
+.devcontainer/
