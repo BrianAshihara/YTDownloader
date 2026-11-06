@@ -26,8 +26,14 @@ function Get-Text([string]$Url) {
     return [string]$r.Content
 }
 
-function Assert-Sha256([string]$File, [string]$Expected) {
-    $Expected = ($Expected.Trim() -split '\s+')[0].ToLowerInvariant()
+function Assert-Sha256([string]$File, [string]$ChecksumText) {
+    # Checksum files come in different formats:
+    #   gyan.dev: "<hash>"   coreutils: "<hash>  file.zip"
+    #   Deno:     PowerShell Get-FileHash list ("Algorithm : SHA256 / Hash : <HASH> / Path : ...")
+    # So just look for the 64-hex-char SHA-256 anywhere in the text.
+    $m = [regex]::Match($ChecksumText, '(?<![0-9a-fA-F])[0-9a-fA-F]{64}(?![0-9a-fA-F])')
+    if (-not $m.Success) { throw "No SHA-256 found in checksum for $(Split-Path $File -Leaf): '$ChecksumText'" }
+    $Expected = $m.Value.ToLowerInvariant()
     $actual = (Get-FileHash -Algorithm SHA256 -Path $File).Hash.ToLowerInvariant()
     if ($actual -ne $Expected) {
         throw "SHA-256 mismatch for $(Split-Path $File -Leaf): expected $Expected, got $actual"
