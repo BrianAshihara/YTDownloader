@@ -1,0 +1,170 @@
+# Builds the Windows installer and creates a DRAFT GitHub Release.
+#
+# Trigger: push a tag that matches APP_VERSION in src/constants.py, e.g.
+#   git tag v2.0.0 && git push origin v2.0.0
+#
+# Code signing (optional) uses SignPath (free for open-source via the SignPath
+# Foundation). It only runs once these are configured in the repo settings:
+#   Variables: SIGNPATH_ORGANIZATION_ID, SIGNPATH_PROJECT_SLUG, SIGNPATH_POLICY_SLUG
+#   Secret:    SIGNPATH_API_TOKEN
+# See docs/SIGNING.md.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write        # create the release
+  id-token: write        # build provenance attestation
+  attestations: write
+
+env:
+  # Compile PyInstaller's bootloader from source. The prebuilt bootloader is
+  # shared by thousands of apps (including malware), which is a major cause of
+  # antivirus false positives. Set to "false" if this step ever breaks.
+  BUILD_BOOTLOADER: "true"
+  SIGNING_ENABLED: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Read version
+        id: version
+        shell: pwsh
+        run: |
+          $v = (Select-String -Path src/constants.py -Pattern 'APP_VERSION\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
+          "version=$v" >> $env:GITHUB_OUTPUT
+          if ($env:GITHUB_REF_TYPE -eq "tag" -and $env:GITHUB_REF_NAME -ne "v$v") {
+            throw "Tag $env:GITHUB_REF_NAME does not match APP_VERSION $v"
+          }
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          if ($env:BUILD_BOOTLOADER -eq "true") {
+            $env:PYINSTALLER_COMPILE_BOOTLOADER = "1"
+            python -m pip install --no-binary pyinstaller "pyinstaller>=6.10"
+          } else {
+            python -m pip install "pyinstaller>=6.10"
+          }
+
+      - name: Run tests
+        run: python -m unittest -v
+
+      - name: Fetch FFmpeg and Deno
+        shell: pwsh
+        run: ./scripts/fetch_binaries.ps1
+
+      - name: Build app (PyInstaller)
+        run: python -m PyInstaller --clean --noconfirm YTDownloader.spec
+
+      # ── Sign the application executable ────────────────────────────
+      - name: Upload unsigned app for signing
+        if: env.SIGNING_ENABLED == 'true'
+        id: upload-app
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-unsigned
+          path: dist/YTDownloader/YTDownloader.exe
+          if-no-files-found: error
+
+      - name: Sign app (SignPath)
+        if: env.SIGNING_ENABLED == 'true'
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_POLICY_SLUG }}
+          artifact-configuration-slug: app
+          github-artifact-id: ${{ steps.upload-app.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed-app
+
+      - name: Replace exe with signed one
+        if: env.SIGNING_ENABLED == 'true'
+        shell: pwsh
+        run: Copy-Item signed-app/YTDownloader.exe dist/YTDownloader/YTDownloader.exe -Force
+
+      # ── Installer ─────────────────────────────────────────────────────
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Get-Command iscc -ErrorAction SilentlyContinue) -and
+              -not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup -y --no-progress
+          }
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
+          if (-not $iscc) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
+          & $iscc "/DAppVersion=${{ steps.version.outputs.version }}" installer/YTDownloader.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
+
+      - name: Upload unsigned installer for signing
+        if: env.SIGNING_ENABLED == 'true'
+        id: upload-installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-unsigned
+          path: dist/installer/YTDownloader-Setup.exe
+          if-no-files-found: error
+
+      - name: Sign installer (SignPath)
+        if: env.SIGNING_ENABLED == 'true'
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_POLICY_SLUG }}
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.upload-installer.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed-installer
+
+      - name: Prepare release files
+        id: files
+        shell: pwsh
+        run: |
+          $v = "${{ steps.version.outputs.version }}"
+          New-Item -ItemType Directory -Force release | Out-Null
+          $src = if ($env:SIGNING_ENABLED -eq "true") { "signed-installer/YTDownloader-Setup.exe" } else { "dist/installer/YTDownloader-Setup.exe" }
+          $setup = "release/YTDownloader-Setup-$v.exe"
+          Copy-Item $src $setup
+          Compress-Archive -Path dist/YTDownloader/* -DestinationPath "release/YTDownloader-$v-portable.zip"
+          Get-ChildItem release -File | ForEach-Object {
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)"
+          } | Set-Content -Encoding ascii release/SHA256SUMS.txt
+          Get-Content release/SHA256SUMS.txt
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            release/*.exe
+            release/*.zip
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          tag_name: v${{ steps.version.outputs.version }}
+          name: YTDownloader ${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          files: release/*

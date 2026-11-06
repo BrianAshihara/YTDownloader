@@ -4,15 +4,24 @@ __pycache__/
 *$py.class
 *.pyo
 *.ico
+!assets/icon.ico
 
 # Distribution / Packaging
 build/
 dist/
+release/
 *.egg-info/
 *.egg
 
 # PyInstaller
 *.manifest
+
+# Bundled third-party binaries (downloaded by scripts/fetch_binaries.ps1)
+bin/
+ffmpeg.exe
+ffprobe.exe
+ffplay.exe
+deno.exe
 
 # Virtual environments
 venv/
@@ -33,9 +42,6 @@ Desktop.ini
 
 # Logs
 *.log
-
-# Local binaries
-ffmpeg.exe
 
 # Dev container
 .devcontainer/

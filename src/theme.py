@@ -1,0 +1,43 @@
+"""Design tokens for the UI. Change colors here, not in app.py."""
+
+# Surfaces
+BG = "#0E1116"
+SURFACE = "#161B22"
+SURFACE_2 = "#1C232C"
+BORDER = "#262E38"
+BORDER_FOCUS = "#3A4654"
+
+# Text
+TEXT = "#E8ECF1"
+TEXT_MUTED = "#9AA5B1"
+TEXT_FAINT = "#6B7682"
+
+# Accent (primary action)
+ACCENT = "#E5484D"
+ACCENT_HOVER = "#C93C41"
+ACCENT_TEXT = "#FFFFFF"
+
+# Secondary buttons
+NEUTRAL = "#252D37"
+NEUTRAL_HOVER = "#2F3944"
+SELECTED = "#3A4654"
+
+# Status
+SUCCESS = "#30A46C"
+SUCCESS_BG = "#132A20"
+WARNING = "#F5A524"
+WARNING_BG = "#2E2412"
+DANGER = "#E5484D"
+DANGER_BG = "#2C1517"
+
+PROGRESS_TRACK = "#222A33"
+PROGRESS_FILL = "#30A46C"
+
+# Geometry
+RADIUS = 12
+RADIUS_SM = 8
+PAD = 20
+
+FONT_FAMILY = "Segoe UI"
+
+THUMB_SIZE = (192, 108)

@@ -1,2 +1,6 @@
-yt-dlp
-customtkinter
+# Runtime dependencies.
+# yt-dlp[default] pulls yt-dlp-ejs (YouTube JS challenge solver), mutagen, etc.
+# Keep yt-dlp recent: YouTube changes often and old versions break.
+yt-dlp[default]>=2026.10.26
+customtkinter>=5.2.2,<6
+pillow>=10.0
