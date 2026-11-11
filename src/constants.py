@@ -3,7 +3,7 @@ from pathlib import Path
 
 # ── App metadata ────────────────────────────────────────────────────
 APP_NAME = "YTDownloader"
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.0.1"
 APP_AUTHOR = "Brian Ashihara"
 APP_URL = "https://github.com/BrianAshihara/YTDownloader"
 

@@ -1,7 +1,7 @@
 ; Inno Setup script for YTDownloader (https://jrsoftware.org/isinfo.php)
 ;
 ; Build (after PyInstaller produced dist\YTDownloader):
-;   iscc /DAppVersion=2.0.0 installer\YTDownloader.iss
+;   iscc /DAppVersion=2.0.1 installer\YTDownloader.iss
 ;
 ; Installs per-user by default (no admin / UAC prompt) into
 ; %LOCALAPPDATA%\Programs\YTDownloader. The user can choose "all users".

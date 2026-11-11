@@ -28,7 +28,7 @@ O caminho correto é assinar o executável.
    - **Variables**: `SIGNPATH_ORGANIZATION_ID`, `SIGNPATH_PROJECT_SLUG`,
      `SIGNPATH_POLICY_SLUG`
    - **Secret**: `SIGNPATH_API_TOKEN`
-5. Crie uma tag (`git tag v2.0.0 && git push origin v2.0.0`). O workflow
+5. Crie uma tag (`git tag v2.0.1 && git push origin v2.0.1`). O workflow
    `release.yml` assina o `YTDownloader.exe`, gera o instalador, assina o
    instalador e cria uma release **rascunho** para você revisar.
 

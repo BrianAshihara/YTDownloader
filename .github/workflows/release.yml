@@ -1,7 +1,7 @@
 # Builds the Windows installer and creates a DRAFT GitHub Release.
 #
 # Trigger: push a tag that matches APP_VERSION in src/constants.py, e.g.
-#   git tag v2.0.0 && git push origin v2.0.0
+#   git tag v2.0.1 && git push origin v2.0.1
 #
 # Code signing (optional) uses SignPath (free for open-source via the SignPath
 # Foundation). It only runs once these are configured in the repo settings:

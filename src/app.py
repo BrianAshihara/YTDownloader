@@ -52,15 +52,33 @@ PREVIEW_DEBOUNCE_MS = 450
 MODE_LABELS = {"video": "Vídeo (MP4)", "audio": "Somente áudio"}
 
 
+PREVIEW_CACHE_SIZE = 30
+THUMB_RADIUS = 10
+# Thumbnails are rendered at 2x and downscaled by CTkImage, so they stay sharp
+# on high-DPI screens (Windows scaling 125 %-200 %).
+THUMB_RENDER_SCALE = 2
+THUMB_MAX_BYTES = 5_000_000
+TITLE_MAX_CHARS = 140
+
+
 @dataclass
 class ThumbnailEvent:
-    url: str
+    key: str
     image: Image.Image | None
 
 
-def _rounded(img: Image.Image, size: tuple[int, int], radius: int) -> Image.Image:
+def _render_size() -> tuple[int, int]:
+    w, h = t.THUMB_SIZE
+    return w * THUMB_RENDER_SCALE, h * THUMB_RENDER_SCALE
+
+
+def _rounded(img: Image.Image, size: tuple[int, int], radius: int, bg: str = t.SURFACE) -> Image.Image:
+    """Cover-crop ``img`` to ``size`` with rounded corners painted in ``bg``.
+
+    The result is opaque RGB: Tk renders partial alpha poorly, so the corners
+    are blended with the card background here instead.
+    """
     img = img.convert("RGB")
-    # Cover-crop to the target aspect ratio.
     tw, th = size
     scale = max(tw / img.width, th / img.height)
     img = img.resize((max(tw, round(img.width * scale)), max(th, round(img.height * scale))), Image.LANCZOS)
@@ -68,21 +86,47 @@ def _rounded(img: Image.Image, size: tuple[int, int], radius: int) -> Image.Imag
     img = img.crop((left, top, left + tw, top + th))
     mask = Image.new("L", size, 0)
     ImageDraw.Draw(mask).rounded_rectangle((0, 0, tw - 1, th - 1), radius=radius, fill=255)
-    out = Image.new("RGBA", size, (0, 0, 0, 0))
+    out = Image.new("RGB", size, bg)
     out.paste(img, (0, 0), mask)
     return out
 
 
-def _fetch_thumbnail(url: str, events: queue.Queue) -> None:
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": f"{APP_NAME}/{APP_VERSION}"})
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = resp.read(2_000_000)
-        img = _rounded(Image.open(io.BytesIO(data)), t.THUMB_SIZE, 10)
-        events.put(ThumbnailEvent(url, img))
-    except Exception as e:  # noqa: BLE001 - a missing thumbnail is cosmetic
-        logger.debug("Thumbnail failed: %s", e)
-        events.put(ThumbnailEvent(url, None))
+def _placeholder_image() -> Image.Image:
+    """Empty rounded tile shown while there's no thumbnail (same size as one)."""
+    size = _render_size()
+    return _rounded(Image.new("RGB", size, t.SURFACE_2), size, THUMB_RADIUS * THUMB_RENDER_SCALE)
+
+
+def _fetch_thumbnail(key: str, urls: list[str], events: queue.Queue) -> None:
+    """Try each URL in order; post the first one that decodes."""
+    for url in urls:
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": f"{APP_NAME}/{APP_VERSION}"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = resp.read(THUMB_MAX_BYTES + 1)
+            if len(data) > THUMB_MAX_BYTES:
+                raise ValueError("thumbnail too large")
+            with Image.open(io.BytesIO(data)) as src:
+                src.load()
+                img = _rounded(src, _render_size(), THUMB_RADIUS * THUMB_RENDER_SCALE)
+            events.put(ThumbnailEvent(key, img))
+            return
+        except Exception as e:  # noqa: BLE001 - a missing thumbnail is cosmetic
+            logger.debug("Thumbnail failed (%s): %s", url, e)
+    events.put(ThumbnailEvent(key, None))
+
+
+def _remember(cache: dict, key, value, limit: int = PREVIEW_CACHE_SIZE) -> None:
+    """Insert into a small insertion-ordered cache, evicting the oldest entry."""
+    cache.pop(key, None)
+    cache[key] = value
+    while len(cache) > limit:
+        cache.pop(next(iter(cache)))
+
+
+def _short_title(title: str) -> str:
+    title = " ".join((title or "").split())
+    return title if len(title) <= TITLE_MAX_CHARS else title[: TITLE_MAX_CHARS - 1].rstrip() + "…"
 
 
 def _font(size: int = 13, weight: str = "normal") -> ctk.CTkFont:
@@ -97,13 +141,19 @@ class YTDownloaderApp:
         self.settings = load_settings()
         self.events: queue.Queue = queue.Queue()
         self.job: DownloadJob | None = None
-        self.info: VideoInfo | None = None
-        self._pending_info_url: str | None = None
+        self.info: VideoInfo | None = None  # preview currently on screen
         self._debounce_id: str | None = None
         self._closing = False
         self._last_success_path: str | None = None
         self._thumb_image: ctk.CTkImage | None = None
         self._pending_warning: str | None = None
+        # Preview state. Results are cached per URL so removing and pasting a
+        # link again shows it instantly, and in-flight sets avoid duplicate
+        # work and "stuck on Carregando…" when results arrive out of order.
+        self._info_cache: dict[str, VideoInfo] = {}
+        self._info_inflight: set[str] = set()
+        self._thumb_cache: dict[str, ctk.CTkImage] = {}
+        self._thumb_inflight: set[str] = set()
 
         self.root = ctk.CTk(fg_color=t.BG)
         self.root.title(APP_NAME)
@@ -205,10 +255,16 @@ class YTDownloaderApp:
         inner = ctk.CTkFrame(card, fg_color="transparent")
         inner.pack(fill="x", padx=14, pady=14)
 
+        # The label always holds an image of the same size (placeholder or
+        # thumbnail): CTkLabel 5.2.x can't clear an image with image=None (the
+        # old one stays on the inner tk label), and a fixed image keeps the
+        # layout from jumping. Rounded corners are drawn into the image itself.
         w, h = t.THUMB_SIZE
+        img = _placeholder_image()
+        self._placeholder = ctk.CTkImage(light_image=img, dark_image=img, size=t.THUMB_SIZE)
         self.thumb = ctk.CTkLabel(
-            inner, text="▶", width=w, height=h, corner_radius=10, fg_color=t.SURFACE_2,
-            text_color=t.TEXT_FAINT, font=_font(28),
+            inner, text="▶", image=self._placeholder, compound="center", width=w, height=h,
+            corner_radius=0, fg_color="transparent", text_color=t.TEXT_FAINT, font=_font(28),
         )
         self.thumb.pack(side="left")
 
@@ -393,26 +449,28 @@ class YTDownloaderApp:
         self._debounce_id = None
         url = self._current_url()
         if self.info and self.info.url == url:
-            return
+            return  # already showing this video
+        self.info = None
         if not url:
-            self.info = None
-            self._pending_info_url = None
             self._reset_preview()
             return
         if not downloader.validate_url(url):
-            self.info = None
-            self._pending_info_url = None
             self._reset_preview("Link inválido", "Use um link do YouTube (youtube.com ou youtu.be).", t.WARNING)
             return
-        if url == self._pending_info_url:
+        cached = self._info_cache.get(url)
+        if cached is not None:
+            self._show_info(cached)
             return
-        self._pending_info_url = url
-        self.info = None
+        self._show_loading()
+        if url not in self._info_inflight:
+            self._info_inflight.add(url)
+            InfoJob(url, self.events).start()
+
+    def _show_loading(self):
         self._set_thumbnail(None)
         self.lbl_title.configure(text="Carregando…")
-        self.lbl_meta.configure(text="")
+        self.lbl_meta.configure(text="", text_color=t.TEXT_MUTED)
         self.lbl_preview_status.configure(text="⏳ Buscando informações do vídeo…", text_color=t.TEXT_FAINT)
-        InfoJob(url, self.events).start()
 
     def _reset_preview(self, title="Nenhum vídeo selecionado", meta="Cole um link acima para ver a prévia.",
                        meta_color=t.TEXT_MUTED):
@@ -421,37 +479,55 @@ class YTDownloaderApp:
         self.lbl_meta.configure(text=meta, text_color=meta_color)
         self.lbl_preview_status.configure(text="")
 
-    def _set_thumbnail(self, img: Image.Image | None):
-        if img is None:
-            self._thumb_image = None
-            self.thumb.configure(image=None, text="▶")
-            return
-        self._thumb_image = ctk.CTkImage(light_image=img, dark_image=img, size=t.THUMB_SIZE)
-        self.thumb.configure(image=self._thumb_image, text="")
+    def _set_thumbnail(self, image: ctk.CTkImage | None):
+        # Never pass image=None to CTkLabel (see _build_preview_card).
+        self._thumb_image = image
+        if image is None:
+            self.thumb.configure(image=self._placeholder, text="▶")
+        else:
+            self.thumb.configure(image=image, text="")
 
-    def _on_info_ready(self, info: VideoInfo):
-        if info.url != self._current_url():
-            return  # user already typed something else
+    def _show_info(self, info: VideoInfo):
         self.info = info
-        self._pending_info_url = None
-        self.lbl_title.configure(text=info.title)
+        self.lbl_title.configure(text=_short_title(info.title))
         bits = [b for b in (info.uploader, human_duration(info.duration)) if b]
         self.lbl_meta.configure(text="  ·  ".join(bits), text_color=t.TEXT_MUTED)
         self.lbl_preview_status.configure(text="✓ Pronto para baixar", text_color=t.SUCCESS)
-        if info.thumbnail_url:
-            threading.Thread(
-                target=_fetch_thumbnail, args=(info.thumbnail_url, self.events), daemon=True
-            ).start()
+        self._show_thumbnail_for(info)
+
+    def _show_thumbnail_for(self, info: VideoInfo):
+        key = info.url
+        cached = self._thumb_cache.get(key)
+        self._set_thumbnail(cached)
+        if cached is not None or key in self._thumb_inflight:
+            return
+        urls = downloader.thumbnail_candidates(info)
+        if not urls:
+            return
+        self._thumb_inflight.add(key)
+        threading.Thread(target=_fetch_thumbnail, args=(key, urls, self.events), daemon=True).start()
+
+    def _on_info_ready(self, info: VideoInfo):
+        self._info_inflight.discard(info.url)
+        _remember(self._info_cache, info.url, info)
+        # Show it only if the box still holds this link and nothing else is on
+        # screen; otherwise the cache serves it when the debounce fires.
+        if self.info is None and info.url == self._current_url():
+            self._show_info(info)
 
     def _on_info_error(self, event: InfoErrorEvent):
-        if event.url != self._current_url():
-            return
-        self._pending_info_url = None
-        self._reset_preview("Não foi possível carregar a prévia", event.message, t.DANGER)
+        self._info_inflight.discard(event.url)
+        if self.info is None and event.url == self._current_url():
+            self._reset_preview("Não foi possível carregar a prévia", event.message, t.DANGER)
 
     def _on_thumbnail(self, event: ThumbnailEvent):
-        if self.info and self.info.thumbnail_url == event.url and event.image is not None:
-            self._set_thumbnail(event.image)
+        self._thumb_inflight.discard(event.key)
+        if event.image is None:
+            return  # not cached: try again next time this link is shown
+        image = ctk.CTkImage(light_image=event.image, dark_image=event.image, size=t.THUMB_SIZE)
+        _remember(self._thumb_cache, event.key, image)
+        if self.info and self.info.url == event.key:
+            self._set_thumbnail(image)
 
     # ── Download ────────────────────────────────────────────────────
 

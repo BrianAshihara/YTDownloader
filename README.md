@@ -101,13 +101,13 @@ python -m unittest -v
 python -m pip install -r requirements-dev.txt
 powershell -ExecutionPolicy Bypass -File scripts\fetch_binaries.ps1
 python -m PyInstaller --clean --noconfirm YTDownloader.spec       # → dist\YTDownloader\
-iscc /DAppVersion=2.0.0 installer\YTDownloader.iss                # → dist\installer\ (requer Inno Setup 6)
+iscc /DAppVersion=2.0.1 installer\YTDownloader.iss                # → dist\installer\ (requer Inno Setup 6)
 ```
 
 ## 🚀 Release
 
 1. Atualize `APP_VERSION` em `src/constants.py`.
-2. Crie e envie a tag correspondente: `git tag v2.0.0 && git push origin v2.0.0`.
+2. Crie e envie a tag correspondente: `git tag v2.0.1 && git push origin v2.0.1`.
 3. O GitHub Actions roda os testes, compila, gera o instalador e o `.zip` portátil, calcula os SHA-256 e cria uma **release rascunho**. Revise e publique.
 
 ---

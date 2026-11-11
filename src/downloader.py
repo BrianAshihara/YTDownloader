@@ -360,6 +360,29 @@ def _thumbnail_for(raw: dict) -> str | None:
     return raw.get("thumbnail")
 
 
+def thumbnail_candidates(info: VideoInfo) -> list[str]:
+    """Thumbnail URLs to try for the preview, best first, without duplicates.
+
+    ``mqdefault`` is tried first (small), then ``hqdefault`` and finally
+    whatever yt-dlp reported, so a single 404 doesn't leave the preview empty.
+    """
+    raw = info.raw or {}
+    urls: list[str | None] = [info.thumbnail_url]
+    if info.id and "youtube" in (raw.get("extractor") or "").lower():
+        urls.append(f"https://i.ytimg.com/vi/{info.id}/hqdefault.jpg")
+    urls.append(raw.get("thumbnail"))
+    for thumb in reversed(raw.get("thumbnails") or []):
+        if isinstance(thumb, dict):
+            urls.append(thumb.get("url"))
+    seen: set[str] = set()
+    out: list[str] = []
+    for u in urls:
+        if u and u.startswith(("http://", "https://")) and u not in seen:
+            seen.add(u)
+            out.append(u)
+    return out[:5]
+
+
 def fetch_info(url: str, bins: dict[str, str | None] | None = None, ydl_logger: Any = None) -> VideoInfo:
     """Extract metadata without downloading. Blocking; run in a thread."""
     opts = build_info_options(bins, ydl_logger)

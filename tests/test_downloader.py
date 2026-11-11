@@ -376,5 +376,29 @@ class TestFetchInfo(unittest.TestCase):
                 downloader.fetch_info(URL, bins=FAKE_BINS)
 
 
+
+class ThumbnailCandidatesTests(unittest.TestCase):
+    def test_youtube_has_fallbacks_without_duplicates(self):
+        raw = {
+            "id": "abc",
+            "extractor": "youtube",
+            "thumbnail": "https://i.ytimg.com/vi/abc/maxresdefault.jpg",
+            "thumbnails": [{"url": "https://i.ytimg.com/vi/abc/hqdefault.jpg"}, {"url": "not-a-url"}],
+        }
+        info = VideoInfo(URL, "abc", "t", "", None, downloader._thumbnail_for(raw), raw=raw)
+        self.assertEqual(
+            downloader.thumbnail_candidates(info),
+            [
+                "https://i.ytimg.com/vi/abc/mqdefault.jpg",
+                "https://i.ytimg.com/vi/abc/hqdefault.jpg",
+                "https://i.ytimg.com/vi/abc/maxresdefault.jpg",
+            ],
+        )
+
+    def test_no_thumbnail(self):
+        info = VideoInfo(URL, "", "t", "", None, None, raw={})
+        self.assertEqual(downloader.thumbnail_candidates(info), [])
+
+
 if __name__ == "__main__":
     unittest.main()
